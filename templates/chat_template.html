@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ persona|replace("_", " ")|title }} Chat</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+  <style>
+        body, h1, h2, h3, p, .chatbot-card, button {
+            font-family: 'Times New Roman', Times, serif;
+}
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-container {
+      width: 100%;
+      display: right;
+      justify-content: space-between;
+      align-items: right;
+      padding: 40px;
+      background-color: rgb(0, 0, 0);
+      color: #ffffff;
+    }
+
+    .header-left,
+    .header-right {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #fff9f9;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+    }
+
+    .left-panel {
+      flex: 1;
+      padding: 40px;
+      background: {% if colors and persona in colors %}linear-gradient(135deg, {{ colors[persona] }}, black){% else %}#222{% endif %};
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .right-panel {
+      flex: 1;
+      background: white;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    #chatbox {
+      width: 100%;
+      max-width: 1000px;
+      height: 60vh;
+      background: #ffffff;
+      color: black;
+      border-radius: 10px;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .message {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 5px;
+      max-width: 75%;
+      display: inline-block;
+      opacity: 0;
+      animation: fadeIn 0.5s forwards ease-in-out;
+    }
+
+    .user-message {
+      background: #cce5ff;
+      align-self: flex-end;
+    }
+
+    .bot-message {
+      background: #e1e1e1;
+      align-self: flex-start;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .typing-indicator {
+      display: none;
+      font-style: italic;
+      color: grey;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    .input-container {
+      display: flex;
+      width: 100%;
+      max-width: 500px;
+      margin-top: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      padding: 10px 20px;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: filter 0.3s;
+      margin-left: 5px;
+    }
+
+    button:hover {
+      filter: brightness(85%);
+    }
+
+    .chatbot-avatar {
+      border-radius: 50%;
+      border: 3px solid white;
+      margin: 20px 0;
+      width: 150px;
+      height: 150px;
+      object-fit: contain;
+    }
+
+    .tip-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin: 15px 0;
+      width: 700px;
+      height: 700px;
+    }
+
+    .tip-item img {
+      width: 900px;
+      height: 900px;
+      object-fit: contain;
+    }
+
+    .fade-in {
+      opacity: 0;
+      animation: fadeInSoft 0.8s ease-out forwards;
+    }
+
+    @keyframes fadeInSoft {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in-delay-1 { animation-delay: 0.2s; }
+    .fade-in-delay-2 { animation-delay: 0.4s; }
+    .fade-in-delay-3 { animation-delay: 0.6s; }
+    .fade-in-delay-4 { animation-delay: 0.8s; }
+  </style>
+</head>
+<body>
+  <div class="header-container">
+    <div class="header-right">💬 Personalised Guidance for Money Archetypes</div>
+  </div>
+
+  <div class="main-container">
+    <div class="left-panel">
+        <div class="header-left">{{ persona|replace("_", " ")|title }} Financial Coach</div>
+      <p>{{ persona_desc }}</p>
+      <img src="{{ url_for('static', filename='avatars/' + images[persona]) }}" alt="Chatbot Avatar" class="chatbot-avatar">
+
+      <div id="chatbox">
+        <p class="typing-indicator">Typing...</p>
+      </div>
+
+      <div class="input-container">
+        <input type="text" id="userInput" placeholder="Type a message..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()" style="background: {{ colors[persona] }};">Send</button>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="tip-item fade-in fade-in-delay-3">
+        <img src="{{ url_for('static', filename='images/sixa.png') }}" alt="Tip 2">
+      </div>
+      <p> </p>
+      <p>There is a personalised coach for a specific archetype. They can help you in your unique needs! 
+        Ask specific questions such as -   “How do I budget $2,000/month?” - it works better than “How do I manage money?”</p>
+
+    </div>
+  </div>
+
+  <audio id="sendSound" src="https://www.myinstants.com/media/sounds/message-sent.mp3"></audio>
+  <audio id="receiveSound" src="https://www.myinstants.com/media/sounds/message-received.mp3"></audio>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      function handleKeyPress(event) {
+        if (event.key === "Enter") sendMessage();
+      }
+
+      window.handleKeyPress = handleKeyPress;
+
+      window.sendMessage = async function () {
+        let input = document.getElementById("userInput");
+        let message = input.value.trim();
+        if (!message) return;
+
+        input.value = "";
+        let chatbox = document.getElementById("chatbox");
+        chatbox.innerHTML += `<p class='message user-message'>${message}</p>`;
+        chatbox.scrollTop = chatbox.scrollHeight;
+
+        document.getElementById("sendSound")?.play();
+        document.querySelector(".typing-indicator").style.display = "block";
+
+        try {
+          await new Promise(res => setTimeout(res, 200));
+          let response = await fetch(`/chat_api/{{ persona }}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message, user_id: "anonymous" })
+          });
+          let data = await response.json();
+          document.querySelector(".typing-indicator").style.display = "none";
+          if (!data.response) {
+            chatbox.innerHTML += `<p class='message bot-message'>Error: No response from server.</p>`;
+          } else {
+            document.getElementById("receiveSound")?.play();
+            chatbox.innerHTML += `<p class='message bot-message'>${data.response}</p>`;
+          }
+        } catch (err) {
+          console.error("Fetch failed:", err);
+          chatbox.innerHTML += `<p class='message bot-message'>&#9888; Server error. Try again later.</p>`;
+        }
+        chatbox.scrollTop = chatbox.scrollHeight;
+      }
+    });
+  </script>
+</body>
+</html>

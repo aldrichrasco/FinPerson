@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Chatbots</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #007bff, #6610f2);
+            color: white;
+            font-family: 'Times New Roman', Times, serif;
+            text-align: center;
+            padding: 20px;
+        }
+        body, h1, h2, h3, p, .chatbot-card, button {
+            font-family: 'Times New Roman', Times, serif;
+}
+
+        .chatbot-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+}
+
+        .chatbot-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  background-color: white;
+  color: #333;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  min-height: 60px;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+}
+
+.chatbot-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+}
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .simulator-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 40px auto;
+            max-width: 600px;
+        }
+
+        .simulator-card {
+            width: 100%;
+            padding: 30px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background-color: white;
+            color: black;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+            text-align: center;
+        }
+
+        .simulator-card:hover {
+            transform: scale(1.08);
+            box-shadow: 0px 10px 20px rgba(0,0,0,0.5);
+        }
+
+        @keyframes glowing {
+            0% { box-shadow: 0 0 5px #ffffff; }
+            50% { box-shadow: 0 0 20px #ffcc00; }
+            100% { box-shadow: 0 0 5px #ffffff; }
+        }
+
+        .simulator-card:hover {
+            animation: glowing 1.5s infinite alternate;
+        }
+
+        #loading {
+            display: none;
+            font-size: 16px;
+            color: #ffffff;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Choose Your Financial Chatbot</h1>
+    <p>Select a chatbot that matches your financial style:</p>
+
+    <div class="simulator-container">
+        <a href="{{ url_for('dashboard') }}">
+            <div class="simulator-card">
+                📊 Evolutionary Financial Decision Sandbox
+                <p style="font-size: 1rem; font-weight: normal; margin-top: 10px;">Make strategic decisions, see before/after impacts, and learn risk insights.</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="chatbot-container">
+        <a href="{{ url_for('chat_page', persona='steady_saver') }}">
+            <div class="chatbot-card steady_saver">💰 Steady Saver</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='conscious_spender') }}">
+            <div class="chatbot-card conscious_spender">🛍️ Conscious Spender</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='ambitious_builder') }}">
+            <div class="chatbot-card ambitious_builder">📈 Ambitious Builder</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='anxious_avoider') }}">
+            <div class="chatbot-card anxious_avoider">😟 Anxious Avoider</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='purposeful_giver') }}">
+            <div class="chatbot-card purposeful_giver">💖 Purposeful Giver</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='strategic_risk_taker') }}">
+            <div class="chatbot-card strategic_risk_taker">🎯 Strategic Risk-Taker</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='cautious_guardian') }}">
+            <div class="chatbot-card cautious_guardian">🛡️ Cautious Guardian</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='impulsive_spender') }}">
+            <div class="chatbot-card impulsive_spender">⚡ Impulsive Spender</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='overconfident_navigator') }}">
+            <div class="chatbot-card overconfident_navigator">🧭 Overconfident Navigator</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='status_seeker') }}">
+            <div class="chatbot-card status_seeker">👑 Status Seeker</div>
+        </a>
+        <a href="{{ url_for('chat_page', persona='passive_drifter') }}">
+            <div class="chatbot-card passive_drifter">🌫️ Passive Drifter</div>
+        </a>
+    </div>
+    
+
+    <div style="margin-top: 40px;"></div>
+    <button onclick="signInWithGoogle()" aria-label="Sign in with Google">Sign in with Google</button>
+    <button onclick="signOut()" aria-label="Sign out from Google">Sign out</button>
+    <p id="userStatus">Not signed in</p>
+    <p id="loading">Signing in...</p>
+
+    <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js"></script>
+    <script defer src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+</body>
+</html>

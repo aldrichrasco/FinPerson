@@ -1,0 +1,139 @@
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+header {
+    background-color: #007bff;
+    color: white;
+    padding: 20px;
+    font-size: 24px;
+}
+
+nav {
+    margin: 20px 0;
+}
+
+nav button {
+    padding: 10px 20px;
+    margin: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #0056b3;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+
+nav button:hover {
+    background-color: #003d82;
+}
+
+/* Page Styling */
+.page {
+    display: none;
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 80%;
+    margin: 20px auto;
+}
+
+.page.active {
+    display: block;
+}
+
+/* Chatbox Styling */
+.chat-container {
+    width: 80%;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#chat-box {
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+
+#chat-input {
+    display: flex;
+}
+
+#chat-input input {
+    flex-grow: 1;
+    padding: 10px;
+    font-size: 16px;
+}
+
+#chat-input button {
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+#chat-input button:hover {
+    background-color: #0056b3;
+}
+
+/* Chat Message Bubbles */
+.user-message, .ai-message {
+    padding: 10px;
+    margin: 5px;
+    border-radius: 10px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background-color: #d1e7ff;
+    align-self: flex-end;
+    text-align: right;
+}
+
+.ai-message {
+    background-color: #e9ecef;
+    align-self: flex-start;
+    text-align: left;
+}
+
+/* Typing Indicator */
+.typing-indicator {
+    font-style: italic;
+    color: gray;
+}
+
+/* Copy Button for AI Messages */
+.copy-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 10px;
+    color: #007bff;
+}
+
+.copy-button:hover {
+    color: #0056b3;
+}
+
+/* Trading Game Styling */
+#trade-feedback {
+    margin-top: 20px;
+    font-size: 18px;
+    font-weight: bold;
+}

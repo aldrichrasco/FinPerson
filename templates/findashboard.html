@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Evolutionary Financial Education</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: space-between;
+            padding: 2em;
+            background-color: #f4f4f9;
+        }
+        .left, .right {
+            width: 45%;
+            padding: 1.5em;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h2 { color: #6a1b9a; }
+        .summary-container {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #e8e8e8;
+            text-align: center;
+        }
+        .fade-in { animation: fadeIn 1s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #loading-spinner { display: none; font-style: italic; color: #999; }
+
+        .action-buttons { display: flex; justify-content: space-between; margin-top: 15px; }
+        .action-button {
+            flex: 1;
+            padding: 15px;
+            margin: 0 5px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .action-button.low-risk { background-color: #28a745; }
+        .action-button.medium-risk { background-color: #ffc107; }
+        .action-button.high-risk { background-color: #dc3545; }
+
+        .action-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+        }
+        .action-button.selected {
+            border: 3px solid #2e0854;
+            box-shadow: 0 0 15px rgba(46,8,84,0.5);
+        }
+        #action-preview {
+            margin-top: 15px;
+            background-color: #fff8e1;
+            border: 2px dashed #ffc107;
+            display: none;
+        }
+        #metrics-list li { margin: 8px 0; font-weight: bold; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="left">
+    <h2>🎚️ Select Difficulty</h2>
+    <select id="difficulty-select">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+    </select>
+
+    <h2>📌 Scenario</h2>
+    <p><strong>Scenario:</strong> <span id="scenario-message">Loading...</span></p>
+    <p id="loading-spinner">⏳ Loading scenario...</p>
+    <button onclick="rollScenario()">🎲 Roll New Scenario</button>
+
+    <h2>💡 Available Choices</h2>
+    <div class="summary-container">
+        <ul id="available-choices">
+            <li>No choices yet.</li>
+        </ul>
+    </div>
+
+    <h2>🛠️ Choose Action</h2>
+    <div class="action-buttons">
+        <button class="action-button low-risk">Low Risk (Option A)</button>
+        <button class="action-button medium-risk">Medium Risk (Option B)</button>
+        <button class="action-button high-risk">High Risk (Option C)</button>
+    </div>
+
+    <div id="action-preview" class="summary-container">
+        <p><strong>Projected Impact:</strong></p>
+        <ul id="preview-list">
+            <li>Select an action to preview.</li>
+        </ul>
+    </div>
+
+    <div id="financial-metrics" class="summary-container">
+        <p><strong>Financial Wellbeing Metrics:</strong></p>
+        <ul id="metrics-list">
+            <li>🛟 Emergency Fund Ratio: --</li>
+            <li>⚖️ Debt-to-Income Ratio: --</li>
+            <li>💹 Savings Rate: --</li>
+        </ul>
+    </div>
+</div>
+
+<div class="right">
+    <h2>📊 Financial Wellbeing Assessment</h2>
+    <div class="summary-container">
+        <p><strong>Status:</strong> <span id="financial-status">Assessing...</span></p>
+        <p><strong>Summary:</strong> <span id="financial-summary">Evaluating...</span></p>
+        <p><strong>📊 Change Summary:</strong> <span id="change-summary">No actions yet.</span></p>
+    </div>
+
+    <div class="summary-container">
+        <p><strong>📈 Income:</strong> <span id="stat-income">$0.00</span></p>
+        <p><strong>📉 Expenses:</strong> <span id="stat-expenses">$0.00</span></p>
+        <p><strong>💰 Savings:</strong> <span id="stat-savings">$0.00</span></p>
+        <p><strong>📊 Investments:</strong> <span id="stat-investments">$0.00</span></p>
+        <p><strong>💳 Debt:</strong> <span id="stat-debt">$0.00</span></p>
+    </div>
+
+    <canvas id="impact-chart"></canvas>
+    <button onclick="refreshAssessment()">🔄 Refresh Assessment</button>
+
+    <h2>📘 Financial Advice</h2>
+    <div class="summary-container">
+        <p><strong>Recommendations:</strong> <span id="financial-recommendations">Loading...</span></p>
+    </div>
+</div>
+
+<script>
+    let chart;
+    
+// Scenario rolling function
+function rollScenario() {
+    const difficulty = document.getElementById("difficulty-select").value;
+    document.getElementById("loading-spinner").style.display = "inline";
+
+    fetch(`/get_scenario?difficulty=${difficulty}`)
+        .then(response => response.json())
+        .then(data => {
+            currentScenario = data.scenario;
+            currentActions = data.actions;
+            currentIncrements = data.increments;
+            financialStats = data.stats;
+
+            document.getElementById("scenario-message").innerText = currentScenario;
+            updateAvailableChoices();
+            updateFinancialStatsDisplay();
+            updateMetrics(data.metrics);
+            renderImpactChart();
+        })
+        .catch(err => alert("Error fetching scenario: " + err))
+        .finally(() => document.getElementById("loading-spinner").style.display = "none");
+}
+
+function updateAvailableChoices() {
+    const choicesContainer = document.getElementById("available-choices");
+    choicesContainer.innerHTML = '';  // Clear existing choices
+
+    currentActions.forEach((action, index) => {
+        const riskLevel = currentIncrements[index].risk_level.replace('_', ' ').toUpperCase();
+        const li = document.createElement('li');
+        li.textContent = `Option ${String.fromCharCode(65 + index)} (${riskLevel}): ${action.action}`;
+        choicesContainer.appendChild(li);
+    });
+
+    // Also update action buttons with option labels
+    const buttons = document.querySelectorAll('.action-button');
+    buttons[0].innerText = `Low Risk (Option A)`;
+    buttons[1].innerText = `Medium Risk (Option B)`;
+    buttons[2].innerText = `High Risk (Option C)`;
+}
+
+// Processing action selected by the user
+function selectOption(choiceIndex) {
+    fetch('/process_action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ choice: choiceIndex })
+    })
+    .then(response => response.json())
+    .then(data => {
+        Object.assign(financialStats, data.stats);
+        document.getElementById("financial-status").innerText = data.assessment;
+        document.getElementById("change-summary").innerText = data.change_summary;
+        document.getElementById("financial-recommendations").innerText = data.recommendations;
+        Object.assign(financialStats, financialStats);
+            updateFinancialStatsDisplay();
+
+            const changeSummaryEl = document.getElementById("change-summary");
+            changeSummaryEl.classList.add("fade-in");
+            setTimeout(() => changeSummaryEl.classList.remove("fade-in"), 1000);
+            updateMetrics(data.metrics)
+
+        updateFinancialStatsDisplay();
+        renderImpactChart();
+
+        // Add a short delay (1.5 seconds) then recalculate metrics clearly
+        setTimeout(() => {
+            recalculateMetrics();
+        }, 2500);
+    })
+    .catch(err => alert("Error processing action: " + err));
+}
+
+// Update metrics clearly in UI
+function updateMetrics(metrics) {
+    document.getElementById("metrics-list").innerHTML = `
+        <li>🛟 Emergency Fund Ratio: ${metrics.emergency_fund_ratio}</li>
+        <li>⚖️ Debt-to-Income Ratio: ${metrics.debt_to_income_ratio}</li>
+        <li>💹 Savings Rate: ${metrics.savings_rate}</li>
+    `;
+}
+
+// Display financial stats
+function updateFinancialStatsDisplay() {
+    for (const [key, value] of Object.entries(financialStats)) {
+        document.getElementById(`stat-${key}`).innerText = `$${value.toFixed(2)}`;
+    }
+}
+
+// Function clearly recalculates metrics on current frontend data
+function recalculateMetrics() {
+    const recalculatedMetrics = {
+        emergency_fund_ratio: (financialStats.savings / (financialStats.expenses + 1)).toFixed(2),
+        debt_to_income_ratio: (Math.abs(financialStats.debt / (financialStats.income + 1))).toFixed(2),
+        savings_rate: (financialStats.savings / (financialStats.income + 1)).toFixed(2),
+    };
+
+    // Clearly update UI
+    updateMetrics(recalculatedMetrics);
+}
+
+function renderImpactChart() {
+        const ctx = document.getElementById('impact-chart').getContext('2d');
+        const labels = currentIncrements.map(inc => inc.risk_level.replace('_', ' ').toUpperCase());
+        const data = currentIncrements.map(inc => inc.increment);
+
+        if (chart) chart.destroy();
+
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Increment Impact', data: data }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `$${ctx.raw.toFixed(2)}` } }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    window.onload = initializeDashboard;
+
+    function initializeDashboard() {
+        document.querySelectorAll('.action-button').forEach((btn, i) => {
+            btn.addEventListener('click', () => selectOption(i));
+        });
+        rollScenario();
+        updateFinancialStatsDisplay();
+    }
+
+</script>
+
+</body>
+</html>
