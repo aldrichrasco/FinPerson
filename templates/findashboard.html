@@ -60,7 +60,40 @@
             border: 2px dashed #ffc107;
             display: none;
         }
-        #metrics-list li { margin: 8px 0; font-weight: bold; }
+        #metrics-list, #metrics-list li {
+    list-style: none;
+    padding-left: 0;
+    margin-left: 0;
+}
+.tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 240px;
+    background-color: #2e0854;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 8px;
+    position: absolute;
+    z-index: 1;
+    top: 125%; 
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -73,6 +106,23 @@
         <option value="medium" selected>Medium</option>
         <option value="hard">Hard</option>
     </select>
+
+    <h2>🧬 Select Persona</h2>
+<select id="persona-select">
+  <option value="steady_saver">Steady Saver</option>
+  <option value="conscious_spender">Conscious Spender</option>
+  <option value="ambitious_builder">Ambitious Builder</option>
+  <option value="anxious_avoider">Anxious Avoider</option>
+  <option value="purposeful_giver">Purposeful Giver</option>
+  <option value="strategic_risk_taker">Strategic Risk-Taker</option>
+  <option value="cautious_guardian">Cautious Guardian</option>
+  <option value="impulsive_spender">Impulsive Spender</option>
+  <option value="overconfident_navigator">Overconfident Navigator</option>
+  <option value="status_seeker">Status Seeker</option>
+  <option value="passive_drifter">Passive Drifter</option>
+  <option value="generous_giver">Generous Giver</option>
+</select>
+
 
     <h2>📌 Scenario</h2>
     <p><strong>Scenario:</strong> <span id="scenario-message">Loading...</span></p>
@@ -103,10 +153,20 @@
     <div id="financial-metrics" class="summary-container">
         <p><strong>Financial Wellbeing Metrics:</strong></p>
         <ul id="metrics-list">
-            <li>🛟 Emergency Fund Ratio: --</li>
-            <li>⚖️ Debt-to-Income Ratio: --</li>
-            <li>💹 Savings Rate: --</li>
+            <li>🛟 Emergency Fund Ratio: -- months</li>
+            <li>💳 Debt-to-Income Ratio: -- %</li>
+            <li>🏠 Asset-to-Debt Ratio: --</li>
+            <li>📈 Retirement Savings Ratio: --</li>
         </ul>
+        <div class="summary-container">
+            <p><strong>📊 Legend:</strong></p>
+            <ul style="list-style: none; padding-left: 0;">
+                <li>✅ Healthy</li>
+                <li>⚠️ Warning</li>
+                <li>❌ Needs Attention</li>
+            </ul>
+        </div>
+        
     </div>
 </div>
 
@@ -141,9 +201,10 @@
 // Scenario rolling function
 function rollScenario() {
     const difficulty = document.getElementById("difficulty-select").value;
+    const persona = document.getElementById("persona-select").value;
     document.getElementById("loading-spinner").style.display = "inline";
 
-    fetch(`/get_scenario?difficulty=${difficulty}`)
+    fetch(`/get_scenario?difficulty=${difficulty}&persona=${persona}`)
         .then(response => response.json())
         .then(data => {
             currentScenario = data.scenario;
@@ -160,6 +221,7 @@ function rollScenario() {
         .catch(err => alert("Error fetching scenario: " + err))
         .finally(() => document.getElementById("loading-spinner").style.display = "none");
 }
+
 
 function updateAvailableChoices() {
     const choicesContainer = document.getElementById("available-choices");
@@ -213,12 +275,25 @@ function selectOption(choiceIndex) {
 
 // Update metrics clearly in UI
 function updateMetrics(metrics) {
+    const ef = metrics.emergency_fund_ratio;
+    const dti = metrics.debt_to_income_ratio;
+    const atd = metrics.asset_to_debt_ratio;
+    const rsr = metrics.retirement_savings_ratio;
+
+    const efEmoji = ef >= 3 ? "✅" : ef >= 1 ? "⚠️" : "❌";
+    const dtiEmoji = dti < 0.3 ? "✅" : dti < 0.5 ? "⚠️" : "❌";
+    const atdEmoji = atd > 1.0 ? "✅" : atd > 0.5 ? "⚠️" : "❌";
+    const rsrEmoji = rsr > 0.15 ? "✅" : rsr > 0.05 ? "⚠️" : "❌";
+
     document.getElementById("metrics-list").innerHTML = `
-        <li>🛟 Emergency Fund Ratio: ${metrics.emergency_fund_ratio}</li>
-        <li>⚖️ Debt-to-Income Ratio: ${metrics.debt_to_income_ratio}</li>
-        <li>💹 Savings Rate: ${metrics.savings_rate}</li>
+        <li> Emergency Fund Ratio: ${ef} months <span style="font-size: 1.3em;">${efEmoji}</span></li>
+        <li> Debt-to-Income Ratio: ${(dti * 100).toFixed(1)}% <span style="font-size: 1.3em;">${dtiEmoji}</span></li>
+        <li> Asset-to-Debt Ratio: ${atd} <span style="font-size: 1.3em;">${atdEmoji}</span></li>
+        <li> Retirement Savings Ratio: ${rsr} <span style="font-size: 1.3em;">${rsrEmoji}</span></li>
     `;
 }
+
+
 
 // Display financial stats
 function updateFinancialStatsDisplay() {
@@ -274,6 +349,37 @@ function renderImpactChart() {
         rollScenario();
         updateFinancialStatsDisplay();
     }
+
+    function selectOption(choiceIndex) {
+    fetch('/process_action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ choice: choiceIndex })
+    })
+    .then(response => response.json())
+    .then(data => {
+        Object.assign(financialStats, data.stats);
+        document.getElementById("financial-status").innerText = data.assessment;
+        document.getElementById("change-summary").innerText = data.change_summary;
+        updateMetrics(data.metrics);
+        updateFinancialStatsDisplay();
+        renderImpactChart();
+
+        // Fetch updated advice
+        return fetch('/get_advice_for_action', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ choice: choiceIndex })
+        });
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.advice) {
+            document.getElementById("financial-recommendations").innerText = data.advice;
+        }
+    })
+    .catch(err => alert("Error processing action or fetching advice: " + err));
+}
 
 </script>
 

@@ -187,9 +187,9 @@ def get_session():
 def get_scenario():
     try:
         difficulty = request.args.get("difficulty", "medium")
-        scenario, increments, category = generate_financial_prompt_and_increments(difficulty)
-        actions = generate_action_options(scenario, increments)
+        persona = request.args.get("persona", "steady_saver")
 
+        # Generate session stats
         stats = {
             "income": random_start(),
             "expenses": random_start(),
@@ -198,7 +198,10 @@ def get_scenario():
             "debt": random_start()
         }
 
-        metrics = calculate_financial_metrics(stats)  # clearly calculated metrics
+        scenario, increments, category = generate_financial_prompt_and_increments(difficulty, stats, persona)
+        actions = generate_action_options(scenario, increments, persona)
+
+        metrics = calculate_financial_metrics(stats)
 
         current_session.update({
             "scenario": scenario,
@@ -214,11 +217,12 @@ def get_scenario():
             "increments": increments,
             "category": category,
             "stats": stats,
-            "metrics": metrics  # clearly added
+            "metrics": metrics
         })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/process_action', methods=['POST'])
 def process_action():
@@ -281,38 +285,66 @@ risk_multipliers = {
     "high_risk": (2.0, 5.0)
 }
 
-def generate_financial_prompt_and_increments(difficulty):
+def generate_financial_prompt_and_increments(difficulty, stats, persona):
     try:
         category = random.choice(categories)
         effect = random.randint(-10000, 10000) if difficulty == "hard" else (
             random.randint(-1000, 1000) if difficulty == "medium" else random.randint(-100, 100)
         )
-        prompt = f"With this {category} and this numerical effect of {effect}, generate a concise financial scenario in 15 words or less."
+
+        persona_desc = personas.get(persona, "")
+
+        financial_snapshot = (
+            f"User Profile: {persona} — {persona_desc}\n"
+            f"Current Stats:\n"
+            f"- Income: ${stats['income']:.2f}\n"
+            f"- Expenses: ${stats['expenses']:.2f}\n"
+            f"- Savings: ${stats['savings']:.2f}\n"
+            f"- Investments: ${stats['investments']:.2f}\n"
+            f"- Debt: ${stats['debt']:.2f}\n"
+        )
+
+        prompt = (
+            f"{financial_snapshot}\n"
+            f"Based on this profile, write a short realistic financial scenario involving '{category}' "
+            f"with a simulated effect of {effect}. Keep it under 30 words."
+        )
+
         try:
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "system", "content": "You are a helpful financial simulator."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=50
+                max_tokens=60
             )
             scenario = response.choices[0].message.content.strip()
         except Exception:
             scenario = f"Mock scenario: {category} changed by {effect}."
+
         increments = [
             {"risk_level": r, "increment": round(effect * random.uniform(*risk_multipliers[r]), 2)}
             for r in risk_levels
         ]
+
         return scenario, increments, category
     except Exception as e:
         traceback.print_exc()
         raise RuntimeError("Failed to generate scenario.")
 
-def generate_action_options(scenario, increments):
+
+def generate_action_options(scenario, increments, persona):
+    persona_desc = personas.get(persona, "")
     actions = []
+
     for inc in increments:
-        prompt = f"Given '{scenario}' and impact of {inc['increment']}, suggest a financial action."
+        prompt = (
+            f"Persona: {persona} — {persona_desc}\n"
+            f"Scenario: {scenario}\n"
+            f"Impact: {inc['increment']} on the financial category.\n"
+            f"Suggest a financial action this persona is likely to take, under 25 words."
+        )
         try:
             response = client.chat.completions.create(
                 model="gpt-4",
@@ -321,22 +353,76 @@ def generate_action_options(scenario, increments):
             )
             action = response.choices[0].message.content.strip()
         except Exception:
-            action = f"Mock action: Adjust your {inc['risk_level']} strategy."
+            action = f"Mock action for {persona} with {inc['risk_level']}."
+
         actions.append({"risk_level": inc["risk_level"], "action": action})
     return actions
+
 
 # Define clearly and once
 
 def calculate_financial_metrics(stats):
-    emergency_fund_ratio = round(stats["savings"] / (stats["expenses"] + 1), 2)
-    debt_to_income_ratio = round(abs(stats["debt"] / (stats["income"] + 1)), 2)
-    savings_rate = round(stats["savings"] / (stats["income"] + 1), 2)
+    # Avoid division by zero
+    def safe_div(x, y): return round(x / (y + 1), 2)
+
+    emergency_fund_ratio = safe_div(stats["savings"], stats["expenses"])  # in months
+    debt_to_income_ratio = safe_div(stats["debt"], stats["income"])       # %
+    asset_to_debt_ratio = safe_div(
+        stats["income"] + stats["savings"] + stats["investments"], abs(stats["debt"]))  # ratio
+    retirement_savings_ratio = safe_div(stats["investments"], stats["income"])  # proxy for retirement
 
     return {
         "emergency_fund_ratio": emergency_fund_ratio,
         "debt_to_income_ratio": debt_to_income_ratio,
-        "savings_rate": savings_rate
+        "asset_to_debt_ratio": asset_to_debt_ratio,
+        "retirement_savings_ratio": retirement_savings_ratio
     }
+
+    
+@app.route('/get_advice_for_action', methods=['POST'])
+def get_advice_for_action():
+    try:
+        data = request.get_json()
+        choice_index = int(data.get("choice", 0))
+        persona = data.get("persona", "steady_saver")
+        persona_desc = personas.get(persona, "This user has no defined persona.")
+
+        action = current_session["actions"][choice_index]
+        increment = current_session["increments"][choice_index]
+        category = current_session.get("category", "income")
+        metrics = calculate_financial_metrics(current_session["stats"])
+
+        # Compose financial metric summary
+        metric_summary = (
+            f"- Emergency Fund Ratio: {metrics['emergency_fund_ratio']} months\n"
+            f"- Debt-to-Income Ratio: {metrics['debt_to_income_ratio'] * 100:.1f}%\n"
+            f"- Asset-to-Debt Ratio: {metrics['asset_to_debt_ratio']}\n"
+            f"- Retirement Savings Ratio: {metrics['retirement_savings_ratio']}\n"
+        )
+
+        prompt = (
+            f"The user chose an action: '{action['action']}' which affects the {category} category by {increment['increment']}.\n"
+            f"Their current financial stats are:\n{metric_summary}\n\n"
+            f"Persona: {persona} — {persona_desc}\n"
+            f"Write a personalized wellbeing analysis and financial advice for this user. Reflect on their tendencies, highlight risks or strengths, and suggest next steps.\n"
+            f"Length: 80–150 words. Tone: practical and empathetic."
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a financial coach who gives concise, insightful, and persona-aligned advice."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        advice = response.choices[0].message.content.strip()
+        return jsonify({"advice": advice})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
