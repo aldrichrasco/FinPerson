@@ -9,6 +9,7 @@ import random
 import traceback
 from dotenv import load_dotenv
 import datetime
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -89,6 +90,103 @@ images = {
     "passive_drifter": "cloud.png"
 }
 
+persona_voice_map = {
+    "steady_saver": {
+        "tone": "disciplined",
+        "emotion": "stability",
+        "guidance": "Calm, consistent, values routine and long-term planning."
+    },
+    "conscious_spender": {
+        "tone": "intentional",
+        "emotion": "control",
+        "guidance": "Carefully weighs options, avoids unnecessary excess, values clarity."
+    },
+    "ambitious_builder": {
+        "tone": "driven",
+        "emotion": "ambition",
+        "guidance": "Optimistic and goal-focused, seeks to maximize growth."
+    },
+    "anxious_avoider": {
+        "tone": "hesitant",
+        "emotion": "fear",
+        "guidance": "Worried and self-doubting, avoids tough decisions but knows change is needed."
+    },
+    "purposeful_giver": {
+        "tone": "compassionate",
+        "emotion": "empathy",
+        "guidance": "Motivated by helping others, seeks meaning, often puts others first."
+    },
+    "strategic_risk_taker": {
+        "tone": "confident",
+        "emotion": "risk",
+        "guidance": "Analytical, bold, and confident — not afraid to act."
+    },
+    "cautious_guardian": {
+        "tone": "protective",
+        "emotion": "caution",
+        "guidance": "Wary of change, prefers safety, questions risky actions."
+    },
+    "impulsive_spender": {
+        "tone": "impulsive",
+        "emotion": "regret",
+        "guidance": "Acts on emotion, wants satisfaction now, often apologetic after."
+    },
+    "overconfident_navigator": {
+        "tone": "assertive",
+        "emotion": "pride",
+        "guidance": "Bold, assumes they’re right, focuses on results — not always realistic."
+    },
+    "status_seeker": {
+        "tone": "image-conscious",
+        "emotion": "insecurity",
+        "guidance": "Wants recognition, status-driven, fears judgment, frames in terms of perception."
+    },
+    "passive_drifter": {
+        "tone": "disengaged",
+        "emotion": "detachment",
+        "guidance": "Passive voice, unsure, prefers comfort, avoids strong positions."
+    },
+    "generous_giver": {
+        "tone": "selfless",
+        "emotion": "joy",
+        "guidance": "Gentle, sacrificial, always thinking about others' wellbeing first."
+    }
+}
+
+# 👇 GLOBAL VARIABLES — Define once near the top
+categories = ["income", "expenses", "savings", "investments", "debt"]
+
+risk_levels = ["low_risk", "medium_risk", "high_risk"]
+
+risk_multipliers = {
+    "low_risk": (0.9, 1.1),
+    "medium_risk": (1.1, 2.0),
+    "high_risk": (2.0, 5.0)
+}
+
+stat_thresholds = {
+    "income": -1000,
+    "expenses": -500,
+    "savings": -2000,
+    "investments": -3000,
+    "debt": -20000
+}
+
+# Global session state
+current_session = {
+    "scenario": None,
+    "increments": [],
+    "actions": [],
+    "category": None,
+    "stats": {
+        "income": random_start(),
+        "expenses": random_start(),
+        "savings": random_start(),
+        "investments": random_start(),
+        "debt": random_start()
+    }
+}
+
 
 # Routes
 @app.route('/')
@@ -111,6 +209,7 @@ def chat_page(persona):
             images=images
         )
 
+    # POST - handle incoming message
     data = request.json
     user_id = data.get("user_id", "anonymous")
     user_message = data.get("message", "").strip()
@@ -129,31 +228,43 @@ def chat_page(persona):
         )
         bot_reply = response.choices[0].message.content
         print(f"GPT says: {bot_reply}")
-
-        db.collection("chats").document(user_id).collection(persona).add({
-            "user_message": user_message,
-            "bot_reply": bot_reply,
-            "timestamp": datetime.datetime.utcnow()
-        })
-
         return jsonify({"response": bot_reply})
+
     except Exception as e:
         print("Internal Server Error:", e)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/chat_api/<persona>/end', methods=['POST'])
+def save_chat_session(persona):
+    print(f"🔥 POST /chat_api/{persona}/end received")  
+    if persona not in personas:
+        return jsonify({"error": "Invalid chatbot persona"}), 400
+
+    data = request.json
+    user_id = data.get("user_id", "anonymous")
+    chat_history = data.get("chat_history", [])
+
+    try:
+        db.collection("chats").document(user_id).collection(persona).add({
+            "history": chat_history,
+            "timestamp": datetime.datetime.utcnow()
+        })
+        print(f"✅ Session stored under chats/{user_id}/{persona}")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print("❌ Firestore session log failed:", e)
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/chat_history/<persona>')
 def get_chat_history(persona):
     user_id = request.args.get("user_id", "anonymous")
-    chats_ref = db.collection("chats").document(user_id).collection(persona)
-    chats = chats_ref.order_by("timestamp").stream()
+    chats_ref = db.collection("chat_sessions").where("user_id", "==", user_id).order_by("timestamp", direction=firestore.Query.DESCENDING).limit(1).stream()
 
-    chat_history = [{"user_message": chat.get("user_message"), "bot_reply": chat.get("bot_reply")} for chat in chats]
-    return jsonify(chat_history)
-
-def random_start():
-    return round(random.uniform(1000, 10000), 2)  # generates random float between 1000 and 10000
+    for chat in chats_ref:
+        return jsonify(chat.to_dict().get("history", []))
+    return jsonify([])
 
 @app.route('/dashboard')
 def dashboard():
@@ -183,14 +294,68 @@ def get_session():
     
 # Ensure to integrate clearly into your existing Flask app
 
+def build_persona_prompt(persona, scenario, increment, category):
+    persona_info = persona_voice_map.get(persona, {
+        "tone": "neutral",
+        "emotion": "unclear",
+        "guidance": "Speak in a practical and emotionally neutral tone."
+    })
+
+    tone = persona_info["tone"]
+    emotion = persona_info["emotion"]
+    guidance = persona_info["guidance"]
+
+    return f"""
+Persona: {persona.replace('_', ' ').title()}
+Tone: {tone}
+Dominant Emotion: {emotion}
+Emotional Voice Guidance: {guidance}
+
+Scenario: {scenario}
+Category Impacted: {category}
+Effect Value: {increment}
+
+Create THREE decision options this persona might realistically have.
+Each option must include:
+1. A 5–10 word internal monologue (first person and reflective)
+2. A concise action description (what they would do)
+3. One primary metric affected (Income/Expenses/Savings/Investments/Debt)
+4. The numerical delta to that metric (e.g., +0.45)
+5. A tone tag (e.g., confident, anxious, impulsive)
+
+Format exactly:
+Option 1
+Monologue:
+Action:
+Metric:
+Delta:
+Tone:
+
+Option 2
+Monologue:
+Action:
+Metric:
+Delta:
+Tone:
+
+Option 3
+Monologue:
+Action:
+Metric:
+Delta:
+Tone:
+
+Keep total response under 40 words. Do not explain. Just output the options directly.
+"""
+
+
 @app.route('/get_scenario', methods=['GET'])
 def get_scenario():
     try:
         difficulty = request.args.get("difficulty", "medium")
         persona = request.args.get("persona", "steady_saver")
 
-        # Generate session stats
-        stats = {
+        raw_stats = {
             "income": random_start(),
             "expenses": random_start(),
             "savings": random_start(),
@@ -198,10 +363,58 @@ def get_scenario():
             "debt": random_start()
         }
 
-        scenario, increments, category = generate_financial_prompt_and_increments(difficulty, stats, persona)
-        actions = generate_action_options(scenario, increments, persona)
+        # Convert to floats safely
+        stats = {}
+        for key in raw_stats:
+            try:
+                stats[key] = float(raw_stats[key])
+            except (TypeError, ValueError):
+                stats[key] = 0.0
 
+        scenario, increments, category = generate_financial_prompt_and_increments(difficulty, stats, persona)
+        increment = increments[1]  # medium risk by default
+        actions = generate_all_actions(scenario, increment["increment"], category, persona)
         metrics = calculate_financial_metrics(stats)
+
+        # Validate and fix missing keys
+        required_keys = {"action", "behavior", "primary_metric", "primary_delta", "tone"}
+        for i, act in enumerate(actions):
+            for key in required_keys:
+                if key not in act or act[key] is None:
+                    print(f"[Warning] Missing '{key}' in action {i+1}, setting fallback.")
+                    act.setdefault("action", "No monologue.")
+                    act.setdefault("behavior", "No behavior provided.")
+                    act.setdefault("primary_metric", "Savings")
+                    act.setdefault("primary_delta", 0.0)
+                    act.setdefault("tone", "neutral")
+
+        # Fallback mock actions if needed
+        if not actions or len(actions) < 3:
+            print("[Fallback] Using mock actions due to insufficient or bad response.")
+            actions = [
+                {
+                    "action": "Mock reflection",
+                    "behavior": "Fallback action",
+                    "primary_metric": "Savings",
+                    "primary_delta": 100.0 * i,
+                    "tone": "neutral",
+                    "intensity": "medium",
+                    "has_conflict": False
+                }
+                for i in range(1, 4)
+            ]
+
+        # Cap rules for stats
+        stat_caps = {
+            "debt": 0.0,
+            "expenses": 0.0,
+            "income": 0.0,
+            "savings": 0.0,
+            "investments": 0.0
+        }
+        for stat, minimum in stat_caps.items():
+            if stats.get(stat, 0) < minimum:
+                stats[stat] = minimum
 
         current_session.update({
             "scenario": scenario,
@@ -219,6 +432,7 @@ def get_scenario():
             "stats": stats,
             "metrics": metrics
         })
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -239,9 +453,21 @@ def process_action():
         new_value = max(old_value + delta, min_allowed)
 
         current_session["stats"][category] = new_value
-        direction = "📈" if delta > 0 else ("📉" if delta < 0 else "➡️")
 
-        metrics = calculate_financial_metrics(current_session["stats"])  # clearly calculate metrics
+        # Cap rules for stats (apply after update)
+        stat_caps = {
+            "debt": 0.0,
+            "expenses": 0.0,
+            "income": 0.0,
+            "savings": 0.0,
+            "investments": 0.0
+        }
+        for stat, minimum in stat_caps.items():
+            if current_session["stats"].get(stat, 0) < minimum:
+                current_session["stats"][stat] = minimum
+
+        direction = "📈" if delta > 0 else ("📉" if delta < 0 else "➡️")
+        metrics = calculate_financial_metrics(current_session["stats"])
 
         return jsonify({
             "assessment": f"Applied {inc['risk_level'].replace('_', ' ').title()} action.",
@@ -250,40 +476,10 @@ def process_action():
             "stats": current_session["stats"],
             "metrics": metrics
         })
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-# Helpers and Logic
-current_session = {
-    "scenario": None,
-    "increments": [],
-    "actions": [],
-    "category": None,
-    "stats": {
-        "income": random_start(),
-        "expenses": random_start(),
-        "savings": random_start(),
-        "investments": random_start(),
-        "debt": random_start()
-    }
-}
-
-stat_thresholds = {
-    "income": -1000,
-    "expenses": -500,
-    "savings": -2000,
-    "investments": -3000,
-    "debt": -20000
-}
-
-categories = ["income", "expenses", "savings", "investments", "debt"]
-risk_levels = ["low_risk", "medium_risk", "high_risk"]
-risk_multipliers = {
-    "low_risk": (0.9, 1.1),
-    "medium_risk": (1.1, 2.0),
-    "high_risk": (2.0, 5.0)
-}
 
 def generate_financial_prompt_and_increments(difficulty, stats, persona):
     try:
@@ -317,7 +513,7 @@ def generate_financial_prompt_and_increments(difficulty, stats, persona):
                     {"role": "system", "content": "You are a helpful financial simulator."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=60
+                max_tokens=100
             )
             scenario = response.choices[0].message.content.strip()
         except Exception:
@@ -334,29 +530,106 @@ def generate_financial_prompt_and_increments(difficulty, stats, persona):
         raise RuntimeError("Failed to generate scenario.")
 
 
-def generate_action_options(scenario, increments, persona):
-    persona_desc = personas.get(persona, "")
-    actions = []
+import random
 
-    for inc in increments:
-        prompt = (
-            f"Persona: {persona} — {persona_desc}\n"
-            f"Scenario: {scenario}\n"
-            f"Impact: {inc['increment']} on the financial category.\n"
-            f"Suggest a financial action this persona is likely to take, under 25 words."
+# Updated generate_all_actions function using the new GPT prompt and parser
+def generate_all_actions(scenario, increment, category, persona):
+    try:
+        prompt = build_persona_prompt(persona, scenario, increment, category)
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.7
         )
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=50
-            )
-            action = response.choices[0].message.content.strip()
-        except Exception:
-            action = f"Mock action for {persona} with {inc['risk_level']}."
 
-        actions.append({"risk_level": inc["risk_level"], "action": action})
-    return actions
+        response_text = response.choices[0].message.content.strip()
+        print("RAW GPT RESPONSE:\n", response_text)
+
+        pattern = re.compile(
+            r"Option \d+\s*"
+            r"Monologue:\s*(.*?)\s*"
+            r"Action:\s*(.*?)\s*"
+            r"Metric:\s*(.*?)\s*"
+            r"Delta:\s*([+-]?[0-9]*\.?[0-9]+)\s*"
+            r"Tone:\s*(.*?)\s*",
+            re.IGNORECASE | re.DOTALL
+        )
+
+        matches = pattern.findall(response_text)
+        actions = []
+        for match in matches:
+            monologue, action, metric, delta, tone = match
+            actions.append({
+                "action": monologue.strip(),
+                "behavior": action.strip(),
+                "primary_metric": metric.strip().capitalize(),
+                "primary_delta": float(delta),
+                "tone": tone.strip().lower()
+            })
+
+        return actions
+
+    except Exception as e:
+        print("GPT fallback activated:", e)
+        traceback.print_exc()
+        return [
+            {
+                "action": f"Fallback thought {i}",
+                "behavior": f"Fallback action {i}",
+                "primary_metric": "Savings",
+                "primary_delta": 100 * i,
+                "tone": "neutral"
+            } for i in range(1, 4)
+        ]
+
+
+
+import re
+
+def parse_gpt_response(response_text):
+    pattern = re.compile(
+        r"Option (\d+)\s*"
+        r"Monologue:\s*(.*?)\s*"
+        r"Action:\s*(.*?)\s*"
+        r"Metric:\s*(.*?)\s*"
+        r"Delta:\s*([+-]?[0-9]*\.?[0-9]+)\s*"
+        r"Tone:\s*(.*?)\s*"
+        r"Intensity:\s*(.*?)\s*"
+        r"Conflict:\s*(true|false)",
+        re.IGNORECASE | re.DOTALL
+    )
+
+    options = []
+    matches = pattern.findall(response_text)
+
+    for match in matches:
+        option_number, monologue, action, metric, delta, tone, intensity, conflict = match
+        options.append({
+            "option": int(option_number),
+            "action": monologue.strip(),  # this is the internal monologue
+            "behavior": action.strip(),   # what they actually do
+            "primary_metric": metric.strip(),
+            "primary_delta": float(delta),
+            "tone": tone.strip().lower(),
+            "intensity": intensity.strip().lower(),
+            "has_conflict": conflict.strip().lower() == "true"
+        })
+
+    return options
+
+def extract_option_block(response_text, option_number):
+    import re
+    pattern = re.compile(
+        rf"Option {option_number}.*?A\)\s*(.*?)\s*B\)\s*(.*?)\s*C\)\s*(.*?)\s*D\)\s*(.*?)($|\nOption|\Z)",
+        re.DOTALL | re.IGNORECASE
+    )
+    match = pattern.search(response_text)
+    if match:
+        return tuple(part.strip() for part in match.groups()[:4])
+    return None
+
 
 
 # Define clearly and once
@@ -378,6 +651,22 @@ def calculate_financial_metrics(stats):
         "retirement_savings_ratio": retirement_savings_ratio
     }
 
+@app.route('/get_persona_metadata', methods=['GET'])
+def get_persona_metadata():
+    try:
+        simplified_data = {
+            persona: {
+                "tone": data.get("tone"),
+                "emotion": data.get("emotion"),
+                "guidance": data.get("guidance"),
+                "taglines": data.get("taglines", [])
+            }
+            for persona, data in persona_voice_map.items()
+        }
+        return jsonify(simplified_data)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     
 @app.route('/get_advice_for_action', methods=['POST'])
 def get_advice_for_action():
@@ -421,8 +710,35 @@ def get_advice_for_action():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/test_firestore')
+def test_firestore():
+    try:
+        # Manual test write
+        db.collection("chats").document("anonymous").collection("ambitious_builder").add({
+            "user_message": "Test user msg",
+            "bot_reply": "Test bot reply",
+            "timestamp": datetime.datetime.utcnow()
+        })
+
+        # Manual test read
+        chats = db.collection("chats").document("anonymous").collection("ambitious_builder").order_by("timestamp").stream()
+        messages = [chat.to_dict() for chat in chats]
+
+        return jsonify(messages)
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    
+db.collection("chats").document("test_user").collection("saver").add({
+    "user_message": "Manual test",
+    "bot_reply": "Hello from saver!",
+    "timestamp": datetime.datetime.utcnow()
+})
 
 
+def safe_div(x, y):
+    return round(x / (y + 1e-6), 2)
 
 if __name__ == '__main__':
     app.run(debug=True)
