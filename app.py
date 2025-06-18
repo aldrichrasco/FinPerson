@@ -230,7 +230,7 @@ def chat_page(persona):
             model="gpt-4",
             messages=[
                 {"role": "system", "content": personas[persona]},
-                {"role": "user", "content": user_message + " but keep it short - maximum 30 words"}
+                {"role": "user", "content": user_message + "reply like a human in one paragaph related to the persona"}
             ]
         )
         bot_reply = response.choices[0].message.content
