@@ -16,7 +16,14 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure session type
 app.config['SESSION_TYPE'] = 'filesystem'
+
+# ✅ Add this line to avoid the 'session_cookie_name' error
+app.config['SESSION_COOKIE_NAME'] = 'session'
+
+# Initialize Flask-Session
 Session(app)
 
 # Secure CSP
