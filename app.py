@@ -152,11 +152,6 @@ persona_voice_map = {
         "tone": "disengaged",
         "emotion": "detachment",
         "guidance": "Passive voice, unsure, prefers comfort, avoids strong positions."
-    },
-    "generous_giver": {
-        "tone": "selfless",
-        "emotion": "joy",
-        "guidance": "Gentle, sacrificial, always thinking about others' wellbeing first."
     }
 }
 
